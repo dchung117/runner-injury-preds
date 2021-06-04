@@ -1,8 +1,10 @@
-from sklearn import model_selection
+import numpy as np
+
 from sklearn.model_selection import StratifiedKFold
 
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import ComplementNB
 from sklearn.pipeline import Pipeline
 
 from sklearn.model_selection import cross_validate, StratifiedKFold
@@ -27,8 +29,8 @@ class Trainer(object):
 
         self.models = {}
         self.scores = {}
-        self._valid_scaler_types = {'standard': StandardScaler, None: None}
-        self._valid_model_types = {'log_reg': LogisticRegression}
+        self._valid_scaler_types = {'standard': StandardScaler, 'min_max': MinMaxScaler, None: None}
+        self._valid_model_types = {'log_reg': LogisticRegression, 'comp_nb': ComplementNB}
 
     def _check_scaler_model_types(self, model_type, scaler_type):
         assert scaler_type in self._valid_scaler_types, f"{scaler_type} must be one of {', '.join(self._valid_scaler_types)}."
@@ -49,7 +51,7 @@ class Trainer(object):
         # Partition training/test sets -> preserve class distribution
         self.test_idxs = np.concatenate((np.random.choice(self.inj_idxs, size=int(test_split*self.inj_idxs.size), replace=False),
                             np.random.choice(self.non_inj_idxs, size=int(test_split*self.non_inj_idxs.size), replace=False)))
-        self.train_idxs = np.array(list(set(range(daily_df.shape[0])) - set(self.test_idxs)))
+        self.train_idxs = np.array(list(set(range(self.data.shape[0])) - set(self.test_idxs)))
 
         self.X_train, self.X_test, self.y_train, self.y_test = self.X[self.train_idxs], self.X[self.test_idxs], self.y[self.train_idxs], self.y[self.test_idxs]
 
@@ -63,7 +65,7 @@ class Trainer(object):
         # Build pipeline object
         model = self._valid_model_types[model_type](**kwargs)
         if scaler_type is None:
-            pipeline = Pipeline(('model', model))
+            pipeline = Pipeline([('model', model)])
         else:
             scaler = self._valid_scaler_types[scaler_type]()
             pipeline = Pipeline([('scaler', scaler), ('model', model)])
@@ -79,7 +81,7 @@ class Trainer(object):
 
         # Cross-validate the model
         pipeline = self.models[(model_type, scaler_type)]
-        self.scores[(model_type, scaler_type)] = cross_validate(pipeline, self.X_train, self.y_train, scoring=scoring, cv=StratifiedKFold(n_splits=cv, shuffle=True))
+        self.scores[(model_type, scaler_type)] = cross_validate(pipeline, self.X_train, self.y_train, scoring=scoring, cv=StratifiedKFold(n_splits=cv, shuffle=True), **kwargs)
 
 if __name__ == "__main__":
     import os
@@ -97,6 +99,8 @@ if __name__ == "__main__":
     daily_df = pd.read_csv(daily_data_path)
 
     model_trainer = Trainer(daily_df, 'injury', ['Athlete ID'], test_split=0.2)
+
+    # Logistic regression
     model_trainer.add_model('standard', 'log_reg')
     print(model_trainer.models[('log_reg', 'standard')])
 
