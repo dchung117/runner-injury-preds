@@ -6,6 +6,7 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import ComplementNB
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
 from sklearn.pipeline import Pipeline
 
 from sklearn.model_selection import cross_validate, StratifiedKFold
@@ -31,7 +32,7 @@ class Trainer(object):
         self.models = {}
         self.scores = {}
         self._valid_scaler_types = {'standard': StandardScaler, 'min_max': MinMaxScaler, None: None}
-        self._valid_model_types = {'log_reg': LogisticRegression, 'comp_nb': ComplementNB, 'knn': KNeighborsClassifier}
+        self._valid_model_types = {'log_reg': LogisticRegression, 'comp_nb': ComplementNB, 'knn': KNeighborsClassifier, 'svm': SVC}
 
     def _check_scaler_model_types(self, model_type, scaler_type):
         assert scaler_type in self._valid_scaler_types, f"{scaler_type} must be one of {', '.join(self._valid_scaler_types)}."
