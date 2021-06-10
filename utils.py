@@ -10,6 +10,8 @@ from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.pipeline import Pipeline
 
+from xgboost import XGBClassifier, cv
+
 from sklearn.model_selection import cross_validate, StratifiedKFold
 
 class Trainer(object):
@@ -34,10 +36,11 @@ class Trainer(object):
         self.scores = {}
         self._valid_scaler_types = {'standard': StandardScaler, 'min_max': MinMaxScaler, None: None}
         self._valid_model_types = {'log_reg': LogisticRegression,
-                                   'comp_nb': ComplementNB, 
-                                   'knn': KNeighborsClassifier, 
+                                   'comp_nb': ComplementNB,
+                                   'knn': KNeighborsClassifier,
                                    'svm': SVC,
-                                   'rf': RandomForestClassifier}
+                                   'rf': RandomForestClassifier,
+                                   'xgb': XGBClassifier}
 
     def _check_scaler_model_types(self, model_type, scaler_type):
         assert scaler_type in self._valid_scaler_types, f"{scaler_type} must be one of {', '.join(self._valid_scaler_types)}."
@@ -78,7 +81,7 @@ class Trainer(object):
             pipeline = Pipeline([('scaler', scaler), ('model', model)])
         self.models[(model_type, scaler_type)]  = pipeline
 
-    def cross_validate(self, scaler_type, model_type, cv, scoring='recall', **kwargs):
+    def cross_validate(self, scaler_type, model_type, cv, scoring='recall', fit_params=None, **kwargs):
         """
         Cross-validate the specified model and scaler type. cv specifies the number of folds.
         """
