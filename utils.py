@@ -1,7 +1,5 @@
 import numpy as np
 
-from sklearn.model_selection import StratifiedKFold
-
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import ComplementNB
@@ -13,6 +11,9 @@ from sklearn.pipeline import Pipeline
 from xgboost import XGBClassifier, cv
 
 from sklearn.model_selection import cross_validate, StratifiedKFold
+
+from imblearn.under_sampling import ClusterCentroids
+from imblearn.pipeline import Pipeline as ImbPipeline
 
 class Trainer(object):
     """
@@ -92,6 +93,90 @@ class Trainer(object):
         # Cross-validate the model
         pipeline = self.models[(model_type, scaler_type)]
         self.scores[(model_type, scaler_type)] = cross_validate(pipeline, self.X_train, self.y_train, scoring=scoring, cv=StratifiedKFold(n_splits=cv, shuffle=True), **kwargs)
+
+class ImbTrainer(object):
+    """
+    Class for training models to predict injuries w/ imbalanced datasets.
+    """
+    def __init__(self, data, target, ignore_cols, test_split=0.2):
+        self.data = data
+        self.target = target
+        self.ignore_cols = ignore_cols
+        self.feat_cols = [c for c in data.columns if (c != target) and (c not in ignore_cols)]
+
+        self.X = data[self.feat_cols].values
+        self.y = data[target].values
+        self.inj_idxs = np.where(self.y == 1)[0]
+        self.non_inj_idxs = np.where(self.y == 0)[0]
+
+        # Split X and y into train/test (create X_train, X_test, y_train, y_test)
+        self.split_train_test(test_split=test_split)
+
+        self.models = {}
+        self.scores = {}
+        self._valid_scaler_types = {'standard': StandardScaler, 'min_max': MinMaxScaler, None: None}
+        self._valid_model_types = {'log_reg': LogisticRegression,
+                                   'comp_nb': ComplementNB,
+                                   'knn': KNeighborsClassifier,
+                                   'svm': SVC,
+                                   'rf': RandomForestClassifier,
+                                   'xgb': XGBClassifier}
+        self._valid_sampler_types = {'clust_cents': ClusterCentroids}
+
+    def _check_scaler_sampler_model_types(self, model_type, scaler_type, sampler_type):
+        assert scaler_type in self._valid_scaler_types, f"{scaler_type} must be one of {', '.join(self._valid_scaler_types)}."
+        assert sampler_type in self._valid_sampler_types, f"{sampler_type} must be one of {', '.join(self._valid_sampler_types)}."
+        assert model_type in self._valid_model_types, f"{model_type} must be one of {', '.join(self._valid_model_types)}."
+
+        print('Model type: ', model_type)
+        print('Scaling: ', scaler_type)
+        print('Sampler type: ', sampler_type)
+
+    def split_train_test(self, test_split):
+        """
+        Divide features and labels into training and test sets.
+        """
+        assert isinstance(test_split, float) and 0 <= test_split < 1, f'test_split must be a float between 0 and 1'
+
+        # Get indices of both classes
+        self.test_split = test_split
+
+        # Partition training/test sets -> preserve class distribution
+        self.test_idxs = np.concatenate((np.random.choice(self.inj_idxs, size=int(test_split*self.inj_idxs.size), replace=False),
+                            np.random.choice(self.non_inj_idxs, size=int(test_split*self.non_inj_idxs.size), replace=False)))
+        self.train_idxs = np.array(list(set(range(self.data.shape[0])) - set(self.test_idxs)))
+
+        self.X_train, self.X_test, self.y_train, self.y_test = self.X[self.train_idxs], self.X[self.test_idxs], self.y[self.train_idxs], self.y[self.test_idxs]
+
+    def add_model(self, scaler_type, sampler_type, model_type, model_params={}, sampler_params={}):
+        """
+        Add model of specified type and scaler w/ cross-validation.
+        """
+        # Check for valid scaling and model types
+        self._check_scaler_sampler_model_types(model_type, scaler_type, sampler_type)
+
+        # Build pipeline object
+        model = self._valid_model_types[model_type](**model_params)
+        sampler = self._valid_sampler_types[sampler_type](**sampler_params)
+
+        if scaler_type is None:
+            pipeline = ImbPipeline([('sampler', sampler), ('model', model)])
+        else:
+            scaler = self._valid_scaler_types[scaler_type]()
+            pipeline = ImbPipeline([('scaler', scaler), ('sampler', sampler), ('model', model)])
+        self.models[(model_type, scaler_type, sampler_type)]  = pipeline
+
+    def cross_validate(self, scaler_type, sampler_type, model_type, cv, scoring='recall', fit_params=None, **kwargs):
+        """
+        Cross-validate the specified model and scaler type. cv specifies the number of folds.
+        """
+        # Check for valid scaling and model types
+        self._check_scaler_sampler_model_types(model_type, scaler_type, sampler_type)
+        assert (model_type, scaler_type, sampler_type) in self.models, f"{(model_type, scaler_type, sampler_type)} not built; run add_model() method."
+
+        # Cross-validate the model
+        pipeline = self.models[(model_type, scaler_type, sampler_type)]
+        self.scores[(model_type, scaler_type, sampler_type)] = cross_validate(pipeline, self.X_train, self.y_train, scoring=scoring, cv=StratifiedKFold(n_splits=cv, shuffle=True), **kwargs)
 
 if __name__ == "__main__":
     import os
