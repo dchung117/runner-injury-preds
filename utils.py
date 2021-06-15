@@ -12,7 +12,7 @@ from xgboost import XGBClassifier, cv
 
 from sklearn.model_selection import cross_validate, StratifiedKFold
 
-from imblearn.under_sampling import ClusterCentroids
+from imblearn.under_sampling import ClusterCentroids, CondensedNearestNeighbour
 from imblearn.pipeline import Pipeline as ImbPipeline
 
 class Trainer(object):
@@ -121,7 +121,8 @@ class ImbTrainer(object):
                                    'svm': SVC,
                                    'rf': RandomForestClassifier,
                                    'xgb': XGBClassifier}
-        self._valid_sampler_types = {'clust_cents': ClusterCentroids}
+        self._valid_sampler_types = {'clust_cents': ClusterCentroids,
+                                     'cnn': CondensedNearestNeighbour}
 
     def _check_scaler_sampler_model_types(self, model_type, scaler_type, sampler_type):
         assert scaler_type in self._valid_scaler_types, f"{scaler_type} must be one of {', '.join(self._valid_scaler_types)}."
